@@ -3,9 +3,11 @@ import logging
 import re
 import os
 from datetime import datetime
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputFile
-from aiogram.utils import executor
+from aiogram.filters import CommandStart, Command
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 # ================= НАСТРОЙКИ =================
 BOT_TOKEN = "8860296167:AAGFjtPRi5uMUNr6VV1yDVsEdtxS37fevEY"  # Вставьте токен!
@@ -14,8 +16,12 @@ ADMIN_CHAT_ID = -1004492034556  # ID вашего канала
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+# Создаем бота с поддержкой HTML
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+dp = Dispatcher()
 
 # ================= ПУТЬ К ФОТО =================
 PHOTO_PATH = "bot_files/"  # Папка с фото
@@ -220,25 +226,25 @@ def validate_address(address):
 def get_main_keyboard():
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
-        InlineKeyboardButton("⭐ Популярное", callback_data="popular"),
-        InlineKeyboardButton("📖 Наше меню", callback_data="menu")
+        InlineKeyboardButton(text="⭐ Популярное", callback_data="popular"),
+        InlineKeyboardButton(text="📖 Наше меню", callback_data="menu")
     )
     kb.add(
-        InlineKeyboardButton("🥂 Фуршетное меню", callback_data="banquet"),
-        InlineKeyboardButton("🐔 Забронировать курицу", callback_data="book_chicken")
+        InlineKeyboardButton(text="🥂 Фуршетное меню", callback_data="banquet"),
+        InlineKeyboardButton(text="🐔 Забронировать курицу", callback_data="book_chicken")
     )
     kb.add(
-        InlineKeyboardButton("🕒 График работы", callback_data="schedule"),
-        InlineKeyboardButton("📞 Контакты", callback_data="contacts")
+        InlineKeyboardButton(text="🕒 График работы", callback_data="schedule"),
+        InlineKeyboardButton(text="📞 Контакты", callback_data="contacts")
     )
     kb.add(
-        InlineKeyboardButton("🛒 Моя корзина", callback_data="cart")
+        InlineKeyboardButton(text="🛒 Моя корзина", callback_data="cart")
     )
     return kb
 
 def get_cancel_keyboard():
     kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(InlineKeyboardButton("🔙 Отмена", callback_data="cancel"))
+    kb.add(InlineKeyboardButton(text="🔙 Отмена", callback_data="cancel"))
     return kb
 
 def get_cart_keyboard(user_id):
@@ -255,25 +261,25 @@ def get_cart_keyboard(user_id):
             
             btn_name = item_name if len(item_name) <= 40 else item_name[:37] + "..."
             
-            btn_minus = InlineKeyboardButton("➖", callback_data=f"dec_{item_id}")
-            btn_center = InlineKeyboardButton(f"{btn_name}", callback_data="noop")
-            btn_plus = InlineKeyboardButton("➕", callback_data=f"inc_{item_id}")
+            btn_minus = InlineKeyboardButton(text="➖", callback_data=f"dec_{item_id}")
+            btn_center = InlineKeyboardButton(text=f"{btn_name}", callback_data="noop")
+            btn_plus = InlineKeyboardButton(text="➕", callback_data=f"inc_{item_id}")
             
             kb.row(btn_minus, btn_center, btn_plus)
     
     kb.row(
-        InlineKeyboardButton("✅ Оформить заказ", callback_data="checkout"),
-        InlineKeyboardButton("🗑 Очистить", callback_data="clear")
+        InlineKeyboardButton(text="✅ Оформить заказ", callback_data="checkout"),
+        InlineKeyboardButton(text="🗑 Очистить", callback_data="clear")
     )
     kb.row(
-        InlineKeyboardButton("🔙 В меню", callback_data="menu"),
-        InlineKeyboardButton("🏠 Главное меню", callback_data="back")
+        InlineKeyboardButton(text="🔙 В меню", callback_data="menu"),
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back")
     )
     
     return kb
 
 # ================= ФУНКЦИЯ ОТПРАВКИ С ФОТО =================
-async def send_with_photo(chat_id, text, image_path, reply_markup=None, parse_mode="HTML"):
+async def send_with_photo(chat_id, text, image_path, reply_markup=None):
     """Отправляет сообщение с фото, если файл существует"""
     try:
         if image_path and os.path.exists(image_path):
@@ -282,7 +288,6 @@ async def send_with_photo(chat_id, text, image_path, reply_markup=None, parse_mo
                 chat_id=chat_id,
                 photo=photo,
                 caption=text,
-                parse_mode=parse_mode,
                 reply_markup=reply_markup
             )
     except Exception as e:
@@ -292,13 +297,12 @@ async def send_with_photo(chat_id, text, image_path, reply_markup=None, parse_mo
     return await bot.send_message(
         chat_id=chat_id,
         text=text,
-        parse_mode=parse_mode,
         reply_markup=reply_markup
     )
 
 # ================= ОБРАБОТЧИКИ КОМАНД =================
 
-@dp.message_handler(commands=['start', 'help'])
+@dp.message(CommandStart())
 async def cmd_start(message: Message):
     user_id = message.from_user.id
     
@@ -331,9 +335,13 @@ async def cmd_start(message: Message):
     )
     await add_user_message(sent_msg)
 
+@dp.message(Command("help"))
+async def cmd_help(message: Message):
+    await cmd_start(message)
+
 # ================= ОБРАБОТКА CALLBACK'ОВ =================
 
-@dp.callback_query_handler(lambda c: c.data == 'back')
+@dp.callback_query(F.data == "back")
 async def back_main(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'main'
@@ -354,7 +362,7 @@ async def back_main(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'cancel')
+@dp.callback_query(F.data == "cancel")
 async def cancel_input(callback: CallbackQuery):
     user_id = callback.from_user.id
     
@@ -384,7 +392,7 @@ async def cancel_input(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'menu')
+@dp.callback_query(F.data == "menu")
 async def show_menu(callback: CallbackQuery):
     user_states[callback.from_user.id] = 'menu'
     
@@ -393,11 +401,11 @@ async def show_menu(callback: CallbackQuery):
     
     kb = InlineKeyboardMarkup(row_width=1)
     for cat_id, cat in MENU_ITEMS_CATEGORIES.items():
-        kb.add(InlineKeyboardButton(f"{cat['emoji']} {cat['name']}", callback_data=f"cat_{cat_id}"))
+        kb.add(InlineKeyboardButton(text=f"{cat['emoji']} {cat['name']}", callback_data=f"cat_{cat_id}"))
     
     kb.row(
-        InlineKeyboardButton("🛒 Моя корзина", callback_data="cart"),
-        InlineKeyboardButton("🔙 Назад", callback_data="back")
+        InlineKeyboardButton(text="🛒 Моя корзина", callback_data="cart"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back")
     )
     
     sent_msg = await send_with_photo(
@@ -413,7 +421,7 @@ async def show_menu(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data.startswith('cat_'))
+@dp.callback_query(F.data.startswith("cat_"))
 async def show_category(callback: CallbackQuery):
     cat_id = callback.data.split('_')[1]
     cat = MENU_ITEMS_CATEGORIES.get(cat_id)
@@ -433,11 +441,11 @@ async def show_category(callback: CallbackQuery):
     for item_id, info in MENU_ITEMS.items():
         if info['category'] == cat_id:
             items_text.append(f"• <b>{info['name']}</b> — <i>{info['price']}₽</i>")
-            kb.add(InlineKeyboardButton(f"➕ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}"))
+            kb.add(InlineKeyboardButton(text=f"➕ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}"))
     
     kb.row(
-        InlineKeyboardButton("🔙 Назад к категориям", callback_data="menu"),
-        InlineKeyboardButton("🏠 Главное меню", callback_data="back")
+        InlineKeyboardButton(text="🔙 Назад к категориям", callback_data="menu"),
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back")
     )
     
     caption = f"{cat['emoji']} <b>{cat['name']}</b>\n\n" + "\n".join(items_text)
@@ -457,7 +465,7 @@ async def show_category(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'popular')
+@dp.callback_query(F.data == "popular")
 async def show_popular(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'popular'
@@ -471,11 +479,11 @@ async def show_popular(callback: CallbackQuery):
     for item_name in popular_items:
         for item_id, info in MENU_ITEMS.items():
             if info['name'] == item_name:
-                kb.add(InlineKeyboardButton(f"⭐ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}"))
+                kb.add(InlineKeyboardButton(text=f"⭐ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}"))
     
     kb.row(
-        InlineKeyboardButton("🔙 Назад", callback_data="back"),
-        InlineKeyboardButton("📖 В меню", callback_data="menu")
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back"),
+        InlineKeyboardButton(text="📖 В меню", callback_data="menu")
     )
     
     sent_msg = await send_with_photo(
@@ -491,7 +499,7 @@ async def show_popular(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data.startswith('add_'))
+@dp.callback_query(F.data.startswith("add_"))
 async def add_to_cart(callback: CallbackQuery):
     user_id = callback.from_user.id
     item_id = int(callback.data.split('_')[1])
@@ -519,7 +527,7 @@ async def add_to_cart(callback: CallbackQuery):
     
     await callback.answer(f"✅ {item_name} {action}!\n\n🛒 Товаров: {total_items} | 💰 Сумма: {total_sum}₽")
 
-@dp.callback_query_handler(lambda c: c.data == 'cart')
+@dp.callback_query(F.data == "cart")
 async def show_cart(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'cart'
@@ -543,7 +551,6 @@ async def show_cart(callback: CallbackQuery):
         sent_msg = await bot.send_message(
             chat_id=user_id,
             text=text,
-            parse_mode="HTML",
             reply_markup=get_cart_keyboard(user_id)
         )
         await add_user_message(sent_msg)
@@ -553,7 +560,7 @@ async def show_cart(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data.startswith('inc_') or c.data.startswith('dec_'))
+@dp.callback_query(F.data.startswith("inc_") or F.data.startswith("dec_"))
 async def change_quantity(callback: CallbackQuery):
     user_id = callback.from_user.id
     action, item_id_str = callback.data.split('_', 1)
@@ -579,13 +586,11 @@ async def change_quantity(callback: CallbackQuery):
         try:
             await callback.message.edit_text(
                 "🛒 <b>Корзина пуста</b>",
-                parse_mode="HTML",
                 reply_markup=get_main_keyboard()
             )
         except:
             sent_msg = await callback.message.answer(
                 "🛒 <b>Корзина пуста</b>",
-                parse_mode="HTML",
                 reply_markup=get_main_keyboard()
             )
             await add_user_message(sent_msg)
@@ -598,16 +603,16 @@ async def change_quantity(callback: CallbackQuery):
         kb = get_cart_keyboard(user_id)
         
         try:
-            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            await callback.message.edit_text(text, reply_markup=kb)
         except:
-            sent_msg = await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
+            sent_msg = await callback.message.answer(text, reply_markup=kb)
             await add_user_message(sent_msg)
             try:
                 await callback.message.delete()
             except:
                 pass
 
-@dp.callback_query_handler(lambda c: c.data == 'clear')
+@dp.callback_query(F.data == "clear")
 async def clear_cart(callback: CallbackQuery):
     user_id = callback.from_user.id
     carts[user_id] = {}
@@ -616,13 +621,11 @@ async def clear_cart(callback: CallbackQuery):
     try:
         await callback.message.edit_text(
             "🗑 <b>Корзина очищена!</b>\n\n🏠 Главное меню",
-            parse_mode="HTML",
             reply_markup=get_main_keyboard()
         )
     except:
         sent_msg = await callback.message.answer(
             "🗑 <b>Корзина очищена!</b>\n\n🏠 Главное меню",
-            parse_mode="HTML",
             reply_markup=get_main_keyboard()
         )
         await add_user_message(sent_msg)
@@ -631,7 +634,7 @@ async def clear_cart(callback: CallbackQuery):
         except:
             pass
 
-@dp.callback_query_handler(lambda c: c.data == 'checkout')
+@dp.callback_query(F.data == "checkout")
 async def checkout(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'checkout'
@@ -649,17 +652,16 @@ async def checkout(callback: CallbackQuery):
     
     kb = InlineKeyboardMarkup(row_width=2)
     kb.row(
-        InlineKeyboardButton("🏠 Доставка", callback_data="del"),
-        InlineKeyboardButton("🏃 Самовывоз", callback_data="pick")
+        InlineKeyboardButton(text="🏠 Доставка", callback_data="del"),
+        InlineKeyboardButton(text="🏃 Самовывоз", callback_data="pick")
     )
-    kb.row(InlineKeyboardButton("🔙 Назад", callback_data="cart"))
+    kb.row(InlineKeyboardButton(text="🔙 Назад", callback_data="cart"))
     
     try:
         await callback.message.edit_text(
             f"<b>📋 Оформление заказа</b>\n\n"
             f"💰 <b>Сумма заказа: {total}₽</b>\n\n"
             f"Выберите способ получения:",
-            parse_mode="HTML",
             reply_markup=kb
         )
     except:
@@ -667,7 +669,6 @@ async def checkout(callback: CallbackQuery):
             f"<b>📋 Оформление заказа</b>\n\n"
             f"💰 <b>Сумма заказа: {total}₽</b>\n\n"
             f"Выберите способ получения:",
-            parse_mode="HTML",
             reply_markup=kb
         )
         await add_user_message(sent_msg)
@@ -676,7 +677,7 @@ async def checkout(callback: CallbackQuery):
         except:
             pass
 
-@dp.callback_query_handler(lambda c: c.data == 'pick')
+@dp.callback_query(F.data == "pick")
 async def pickup(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'waiting_phone'
@@ -686,7 +687,6 @@ async def pickup(callback: CallbackQuery):
             "🏃 <b>Самовывоз</b>\n\n"
             "📍 Адрес: 3-й квартал, 16, 305502, пос. Маршала Жукова, Курский район, Курская область\n\n"
             "📞 Пожалуйста, введите ваш номер телефона:",
-            parse_mode="HTML",
             reply_markup=get_cancel_keyboard()
         )
     except:
@@ -694,7 +694,6 @@ async def pickup(callback: CallbackQuery):
             "🏃 <b>Самовывоз</b>\n\n"
             "📍 Адрес: 3-й квартал, 16, 305502, пос. Маршала Жукова, Курский район, Курская область\n\n"
             "📞 Пожалуйста, введите ваш номер телефона:",
-            parse_mode="HTML",
             reply_markup=get_cancel_keyboard()
         )
         await add_user_message(sent_msg)
@@ -703,7 +702,7 @@ async def pickup(callback: CallbackQuery):
         except:
             pass
 
-@dp.callback_query_handler(lambda c: c.data == 'del')
+@dp.callback_query(F.data == "del")
 async def delivery(callback: CallbackQuery):
     user_id = callback.from_user.id
     total = get_cart_total(user_id)
@@ -723,7 +722,6 @@ async def delivery(callback: CallbackQuery):
             "🚚 Доставка в течение 60-90 минут\n"
             "💰 Бесплатная доставка при заказе от 2000₽\n\n"
             "📍 Пожалуйста, введите ваш адрес:",
-            parse_mode="HTML",
             reply_markup=get_cancel_keyboard()
         )
     except:
@@ -732,7 +730,6 @@ async def delivery(callback: CallbackQuery):
             "🚚 Доставка в течение 60-90 минут\n"
             "💰 Бесплатная доставка при заказе от 2000₽\n\n"
             "📍 Пожалуйста, введите ваш адрес:",
-            parse_mode="HTML",
             reply_markup=get_cancel_keyboard()
         )
         await add_user_message(sent_msg)
@@ -743,16 +740,16 @@ async def delivery(callback: CallbackQuery):
 
 # ================= ДОП. РАЗДЕЛЫ =================
 
-@dp.callback_query_handler(lambda c: c.data == 'banquet')
+@dp.callback_query(F.data == "banquet")
 async def banquet_menu(callback: CallbackQuery):
     # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
-        InlineKeyboardButton("📋 Подробное описание", callback_data="show_banquet"),
-        InlineKeyboardButton("🎯 Заказать фуршет", callback_data="order_banquet"),
-        InlineKeyboardButton("🔙 Назад", callback_data="back")
+        InlineKeyboardButton(text="📋 Подробное описание", callback_data="show_banquet"),
+        InlineKeyboardButton(text="🎯 Заказать фуршет", callback_data="order_banquet"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back")
     )
     
     sent_msg = await send_with_photo(
@@ -773,7 +770,7 @@ async def banquet_menu(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'show_banquet')
+@dp.callback_query(F.data == "show_banquet")
 async def show_banquet_details(callback: CallbackQuery):
     items_text = "\n".join([f"• {item}" for item in BANQUET_MENU['items']])
     
@@ -782,8 +779,8 @@ async def show_banquet_details(callback: CallbackQuery):
     
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
-        InlineKeyboardButton("🎯 Заказать фуршет", callback_data="order_banquet"),
-        InlineKeyboardButton("🔙 Назад", callback_data="banquet")
+        InlineKeyboardButton(text="🎯 Заказать фуршет", callback_data="order_banquet"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="banquet")
     )
     
     sent_msg = await send_with_photo(
@@ -803,7 +800,7 @@ async def show_banquet_details(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'order_banquet')
+@dp.callback_query(F.data == "order_banquet")
 async def order_banquet(callback: CallbackQuery):
     user_id = callback.from_user.id
     
@@ -815,7 +812,6 @@ async def order_banquet(callback: CallbackQuery):
     
     sent_msg = await callback.message.answer(
         "🎯 <b>Бронирование фуршета</b>\n\n📝 Введите количество персон (от 5):\n<i>Например: 10</i>",
-        parse_mode="HTML",
         reply_markup=get_cancel_keyboard()
     )
     await add_user_message(sent_msg)
@@ -825,16 +821,16 @@ async def order_banquet(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'book_chicken')
+@dp.callback_query(F.data == "book_chicken")
 async def book_chicken(callback: CallbackQuery):
     # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
-        InlineKeyboardButton("📅 Забронировать к 18:00", callback_data="book_18"),
-        InlineKeyboardButton("💬 Написать менеджеру", callback_data="contact_manager"),
-        InlineKeyboardButton("🔙 Назад", callback_data="back")
+        InlineKeyboardButton(text="📅 Забронировать к 18:00", callback_data="book_18"),
+        InlineKeyboardButton(text="💬 Написать менеджеру", callback_data="contact_manager"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back")
     )
     
     sent_msg = await send_with_photo(
@@ -856,7 +852,7 @@ async def book_chicken(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'book_18')
+@dp.callback_query(F.data == "book_18")
 async def book_18(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'waiting_phone_chicken'
@@ -868,7 +864,6 @@ async def book_18(callback: CallbackQuery):
         "📅 <b>Бронирование курицы к 18:00</b>\n\n"
         "🐔 Курица Гриль ~1.1 кг — <b>1000₽</b>\n\n"
         "📞 Введите ваш номер телефона для подтверждения:",
-        parse_mode="HTML",
         reply_markup=get_cancel_keyboard()
     )
     await add_user_message(sent_msg)
@@ -878,17 +873,16 @@ async def book_18(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'contact_manager')
+@dp.callback_query(F.data == "contact_manager")
 async def contact_manager(callback: CallbackQuery):
     # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
     kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(InlineKeyboardButton("🔙 Назад", callback_data="book_chicken"))
+    kb.add(InlineKeyboardButton(text="🔙 Назад", callback_data="book_chicken"))
     
     sent_msg = await callback.message.answer(
         "📞 <b>Свяжитесь с нами:</b>\n\nТелефон: +7 (900) 000-00-00\nTelegram: @grill_bar_manager\n\nМы на связи с 10:00 до 20:00!",
-        parse_mode="HTML",
         reply_markup=kb
     )
     await add_user_message(sent_msg)
@@ -898,13 +892,13 @@ async def contact_manager(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'schedule')
+@dp.callback_query(F.data == "schedule")
 async def schedule(callback: CallbackQuery):
     # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
     kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(InlineKeyboardButton("🔙 Назад", callback_data="back"))
+    kb.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back"))
     
     sent_msg = await callback.message.answer(
         "🕒 <b>График работы:</b>\n\n"
@@ -912,7 +906,6 @@ async def schedule(callback: CallbackQuery):
         "Сб: 🚫 <b>Выходной</b>\n"
         "Вс: 🚫 <b>Выходной</b>\n\n"
         "🍗 Заказы на гриль принимаем до 19:00",
-        parse_mode="HTML",
         reply_markup=kb
     )
     await add_user_message(sent_msg)
@@ -922,17 +915,17 @@ async def schedule(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'contacts')
+@dp.callback_query(F.data == "contacts")
 async def contacts(callback: CallbackQuery):
     # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
-        InlineKeyboardButton("📍 Показать на карте", callback_data="show_location"),
-        InlineKeyboardButton("📞 Позвонить", callback_data="call_phone"),
+        InlineKeyboardButton(text="📍 Показать на карте", callback_data="show_location"),
+        InlineKeyboardButton(text="📞 Позвонить", callback_data="call_phone"),
     )
-    kb.row(InlineKeyboardButton("🔙 Назад", callback_data="back"))
+    kb.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back"))
     
     sent_msg = await callback.message.answer(
         "📞 <b>Наши контакты:</b>\n\n"
@@ -941,7 +934,6 @@ async def contacts(callback: CallbackQuery):
         "💬 <b>Telegram:</b> @grill_bar\n"
         "📧 <b>Email:</b> info@grillbar.ru\n\n"
         "⏰ <b>Режим работы:</b> Пн-Пт 10:00-20:00",
-        parse_mode="HTML",
         reply_markup=kb
     )
     await add_user_message(sent_msg)
@@ -951,21 +943,21 @@ async def contacts(callback: CallbackQuery):
     except:
         pass
 
-@dp.callback_query_handler(lambda c: c.data == 'show_location')
+@dp.callback_query(F.data == "show_location")
 async def show_location(callback: CallbackQuery):
     await callback.message.answer_location(latitude=51.7180, longitude=36.1870, reply_markup=get_main_keyboard())
     await callback.answer("📍 Мы находимся здесь!")
 
-@dp.callback_query_handler(lambda c: c.data == 'call_phone')
+@dp.callback_query(F.data == "call_phone")
 async def call_phone(callback: CallbackQuery):
     await callback.answer("📞 Наш телефон: +7 (900) 000-00-00")
 
-@dp.callback_query_handler(lambda c: c.data == 'noop')
+@dp.callback_query(F.data == "noop")
 async def noop(callback: CallbackQuery):
     await callback.answer()
 
 # ================= ГЛАВНЫЙ ОБРАБОТЧИК ТЕКСТОВЫХ СООБЩЕНИЙ =================
-@dp.message_handler(content_types=['text'])
+@dp.message(F.text)
 async def process_user_input(message: Message):
     user_id = message.from_user.id
     text = message.text.strip()
@@ -981,7 +973,7 @@ async def process_user_input(message: Message):
     # ---- ВВОД АДРЕСА ----
     if state == 'waiting_address':
         if not validate_address(text):
-            sent_msg = await message.answer("⚠️ <b>Некорректный адрес!</b>\n\nВведите адрес более подробно:\n<i>Пример: г. Москва, ул. Ленина, д. 10, кв. 25</i>", parse_mode="HTML")
+            sent_msg = await message.answer("⚠️ <b>Некорректный адрес!</b>\n\nВведите адрес более подробно:\n<i>Пример: г. Москва, ул. Ленина, д. 10, кв. 25</i>")
             await add_user_message(sent_msg)
             return
         
@@ -995,7 +987,7 @@ async def process_user_input(message: Message):
     # ---- ВВОД ТЕЛЕФОНА (для заказа) ----
     if state == 'waiting_phone':
         if not validate_phone(text):
-            sent_msg = await message.answer("⚠️ <b>Некорректный номер телефона!</b>\n\nВведите номер в формате:\n<i>+7 (999) 123-45-67 или 89991234567</i>", parse_mode="HTML")
+            sent_msg = await message.answer("⚠️ <b>Некорректный номер телефона!</b>\n\nВведите номер в формате:\n<i>+7 (999) 123-45-67 или 89991234567</i>")
             await add_user_message(sent_msg)
             return
         
@@ -1004,7 +996,7 @@ async def process_user_input(message: Message):
         
         user_states[user_id] = 'main'
         kb = InlineKeyboardMarkup(row_width=1)
-        kb.add(InlineKeyboardButton("🏠 В главное меню", callback_data="back"))
+        kb.add(InlineKeyboardButton(text="🏠 В главное меню", callback_data="back"))
         
         # Удаляем все старые сообщения перед завершением
         await delete_all_user_messages(user_id)
@@ -1014,7 +1006,6 @@ async def process_user_input(message: Message):
             "📞 С вами свяжется наша кухня для уточнения деталей доставки.\n\n"
             "💳 Оплата при получении: наличными или картой\n\n"
             "Спасибо за заказ!",
-            parse_mode="HTML",
             reply_markup=kb
         )
         await add_user_message(sent_msg)
@@ -1025,7 +1016,7 @@ async def process_user_input(message: Message):
     # ---- ВВОД ТЕЛЕФОНА (для брони курицы) ----
     if state == 'waiting_phone_chicken':
         if not validate_phone(text):
-            sent_msg = await message.answer("⚠️ <b>Некорректный номер!</b>\n<i>Пример: +7 (999) 123-45-67</i>", parse_mode="HTML")
+            sent_msg = await message.answer("⚠️ <b>Некорректный номер!</b>\n<i>Пример: +7 (999) 123-45-67</i>")
             await add_user_message(sent_msg)
             return
 
@@ -1038,13 +1029,13 @@ async def process_user_input(message: Message):
             f"📱 Для связи: @{message.from_user.username}"
         )
         
-        await bot.send_message(ADMIN_CHAT_ID, order_text, parse_mode="HTML")
+        await bot.send_message(ADMIN_CHAT_ID, order_text)
         
         user_states[user_id] = 'main'
         # Удаляем все старые сообщения перед завершением
         await delete_all_user_messages(user_id)
         
-        sent_msg = await message.answer("✅ <b>Курица забронирована на 18:00!</b>\n\n🐔 Мы уже начали готовить вашу курочку!\n📞 Ожидайте звонка для подтверждения.\n\n🏠 Главное меню:", parse_mode="HTML", reply_markup=get_main_keyboard())
+        sent_msg = await message.answer("✅ <b>Курица забронирована на 18:00!</b>\n\n🐔 Мы уже начали готовить вашу курочку!\n📞 Ожидайте звонка для подтверждения.\n\n🏠 Главное меню:", reply_markup=get_main_keyboard())
         await add_user_message(sent_msg)
         return
 
@@ -1055,7 +1046,7 @@ async def process_user_input(message: Message):
         try:
             persons = int(text)
             if persons < BANQUET_MENU['min_persons']:
-                sent_msg = await message.answer(f"⚠️ <b>Минимальное количество: {BANQUET_MENU['min_persons']} персон!</b>\nВведите число от {BANQUET_MENU['min_persons']}:", parse_mode="HTML")
+                sent_msg = await message.answer(f"⚠️ <b>Минимальное количество: {BANQUET_MENU['min_persons']} персон!</b>\nВведите число от {BANQUET_MENU['min_persons']}:")
                 await add_user_message(sent_msg)
                 return
             
@@ -1066,7 +1057,7 @@ async def process_user_input(message: Message):
             await add_user_message(sent_msg)
             return
         except ValueError:
-            sent_msg = await message.answer("⚠️ <b>Пожалуйста, введите число!</b>\n<i>Например: 10</i>", parse_mode="HTML")
+            sent_msg = await message.answer("⚠️ <b>Пожалуйста, введите число!</b>\n<i>Например: 10</i>")
             await add_user_message(sent_msg)
             return
 
@@ -1082,7 +1073,7 @@ async def process_user_input(message: Message):
     # Шаг 3: Ввод телефона
     if state == 'banquet_phone':
         if not validate_phone(text):
-            sent_msg = await message.answer("⚠️ <b>Некорректный номер телефона!</b>\n\nВведите номер в формате:\n<i>+7 (999) 123-45-67 или 89991234567</i>", parse_mode="HTML")
+            sent_msg = await message.answer("⚠️ <b>Некорректный номер телефона!</b>\n\nВведите номер в формате:\n<i>+7 (999) 123-45-67 или 89991234567</i>")
             await add_user_message(sent_msg)
             return
         
@@ -1096,7 +1087,7 @@ async def process_user_input(message: Message):
     # Шаг 4: Ввод адреса (последний шаг)
     if state == 'banquet_address':
         if not validate_address(text):
-            sent_msg = await message.answer("⚠️ <b>Некорректный адрес!</b>\n\nВведите адрес более подробно:\n<i>Пример: г. Москва, ул. Ленина, д. 10, кв. 25</i>", parse_mode="HTML")
+            sent_msg = await message.answer("⚠️ <b>Некорректный адрес!</b>\n\nВведите адрес более подробно:\n<i>Пример: г. Москва, ул. Ленина, д. 10, кв. 25</i>")
             await add_user_message(sent_msg)
             return
         
@@ -1119,7 +1110,7 @@ async def process_user_input(message: Message):
         )
         
         try:
-            await bot.send_message(ADMIN_CHAT_ID, order_text, parse_mode="HTML")
+            await bot.send_message(ADMIN_CHAT_ID, order_text)
         except Exception as e:
             logger.error(f"Ошибка при отправке фуршета: {e}")
         
@@ -1136,7 +1127,6 @@ async def process_user_input(message: Message):
             f"👥 Персон: {persons}\n"
             f"💰 Сумма: {total}₽\n\n"
             f"📞 С вами свяжется наша команда для уточнения деталей!",
-            parse_mode="HTML",
             reply_markup=get_main_keyboard()
         )
         await add_user_message(sent_msg)
@@ -1181,12 +1171,12 @@ async def send_order_to_admin(user_id):
     order_text += f"🕒 <b>Время заказа:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     
     try:
-        await bot.send_message(ADMIN_CHAT_ID, order_text, parse_mode="HTML")
+        await bot.send_message(ADMIN_CHAT_ID, order_text)
     except Exception as e:
         logger.error(f"Ошибка при отправке заказа: {e}")
 
 # ================= ОБРАБОТКА ОШИБОК =================
-@dp.errors_handler()
+@dp.errors()
 async def error_handler(update: types.Update, exception: Exception):
     logger.error(f"Ошибка: {exception}")
     
@@ -1205,8 +1195,7 @@ async def error_handler(update: types.Update, exception: Exception):
             ADMIN_CHAT_ID,
             f"❌ <b>Произошла ошибка!</b>\n\nОшибка: {exception}\n"
             f"Пользователь ID: {user_id}\nИмя: {first_name}\n"
-            f"Время: {datetime.now().strftime('%d.%m.%Y %H:%M')}",
-            parse_mode="HTML"
+            f"Время: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         )
         
         if user_id:
@@ -1214,7 +1203,6 @@ async def error_handler(update: types.Update, exception: Exception):
                 await bot.send_message(
                     user_id,
                     "⚠️ <b>Произошла ошибка.</b>\nПопробуйте еще раз или напишите в поддержку: @grill_bar_support",
-                    parse_mode="HTML",
                     reply_markup=get_main_keyboard()
                 )
             except:
@@ -1226,8 +1214,12 @@ async def error_handler(update: types.Update, exception: Exception):
     return True
 
 # ================= ЗАПУСК =================
-if __name__ == "__main__":
+async def main():
     print("🤖 Бот Гриль Бар запущен!")
     print("👨‍💼 Ожидание сообщений...")
     
-    executor.start_polling(dp, skip_updates=True)
+    # Запускаем поллинг
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
