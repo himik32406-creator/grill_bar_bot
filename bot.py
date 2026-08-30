@@ -27,7 +27,7 @@ bot = Bot(
 dp = Dispatcher()
 
 # ================= ПУТЬ К ФОТО =================
-PHOTO_PATH = "bot_files/"
+PHOTO_PATH = ""  # Фото лежат в корне репозитория
 
 CATEGORY_IMAGES = {
     "hot": PHOTO_PATH + "hot_food.jpg",
