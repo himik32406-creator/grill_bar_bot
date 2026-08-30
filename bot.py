@@ -911,3 +911,293 @@ async def schedule(callback: CallbackQuery):
 async def contacts(callback: CallbackQuery):
     await delete_all_user_messages(callback.from_user.id)
     
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📍 Показать на карте", callback_data="show_location"),
+                InlineKeyboardButton(text="📞 Позвонить", callback_data="call_phone")
+            ],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back")]
+        ]
+    )
+    
+    sent_msg = await callback.message.answer(
+        "📞 <b>Наши контакты:</b>\n\n"
+        "📍 <b>Адрес:</b> 3-й квартал, 16, 305502, пос. Маршала Жукова, Курский район, Курская область\n"
+        "📱 <b>Телефон:</b> +7 (900) 000-00-00\n"
+        "💬 <b>Telegram:</b> @grill_bar\n"
+        "📧 <b>Email:</b> info@grillbar.ru\n\n"
+        "⏰ <b>Режим работы:</b> Пн-Пт 10:00-20:00",
+        reply_markup=kb
+    )
+    await add_user_message(sent_msg)
+    
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+@dp.callback_query(F.data == "show_location")
+async def show_location(callback: CallbackQuery):
+    await callback.message.answer_location(latitude=51.7180, longitude=36.1870, reply_markup=get_main_keyboard())
+    await callback.answer("📍 Мы находимся здесь!")
+
+@dp.callback_query(F.data == "call_phone")
+async def call_phone(callback: CallbackQuery):
+    await callback.answer("📞 Наш телефон: +7 (900) 000-00-00")
+
+@dp.callback_query(F.data == "noop")
+async def noop(callback: CallbackQuery):
+    await callback.answer()
+
+# ================= ГЛАВНЫЙ ОБРАБОТЧИК ТЕКСТОВЫХ СООБЩЕНИЙ =================
+@dp.message(F.text)
+async def process_user_input(message: Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    
+    await clear_history(user_id, keep_message_id=message.message_id)
+    await add_user_message(message)
+    
+    state = user_states.get(user_id, 'main')
+
+    # ---- ВВОД АДРЕСА ----
+    if state == 'waiting_address':
+        if not validate_address(text):
+            sent_msg = await message.answer("⚠️ <b>Некорректный адрес!</b>\n\nВведите адрес более подробно:\n<i>Пример: г. Москва, ул. Ленина, д. 10, кв. 25</i>")
+            await add_user_message(sent_msg)
+            return
+        
+        carts[user_id]['address'] = text
+        user_states[user_id] = 'waiting_phone'
+        
+        sent_msg = await message.answer("✅ Адрес принят!\n\n📞 Теперь введите ваш номер телефона:", reply_markup=get_cancel_keyboard())
+        await add_user_message(sent_msg)
+        return
+
+    # ---- ВВОД ТЕЛЕФОНА (для заказа) ----
+    if state == 'waiting_phone':
+        if not validate_phone(text):
+            sent_msg = await message.answer("⚠️ <b>Некорректный номер телефона!</b>\n\nВведите номер в формате:\n<i>+7 (999) 123-45-67 или 89991234567</i>")
+            await add_user_message(sent_msg)
+            return
+        
+        carts[user_id]['phone'] = text
+        await send_order_to_admin(user_id)
+        
+        user_states[user_id] = 'main'
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🏠 В главное меню", callback_data="back")]
+            ]
+        )
+        
+        await delete_all_user_messages(user_id)
+        
+        sent_msg = await message.answer(
+            "🎉 <b>ЗАКАЗ ПРИНЯТ!</b>\n\n"
+            "📞 С вами свяжется наша кухня для уточнения деталей доставки.\n\n"
+            "💳 Оплата при получении: наличными или картой\n\n"
+            "Спасибо за заказ!",
+            reply_markup=kb
+        )
+        await add_user_message(sent_msg)
+        
+        carts[user_id] = {}
+        return
+
+    # ---- ВВОД ТЕЛЕФОНА (для брони курицы) ----
+    if state == 'waiting_phone_chicken':
+        if not validate_phone(text):
+            sent_msg = await message.answer("⚠️ <b>Некорректный номер!</b>\n<i>Пример: +7 (999) 123-45-67</i>")
+            await add_user_message(sent_msg)
+            return
+
+        order_text = (
+            "🐔 <b>БРОНЬ КУРИЦЫ ГРИЛЬ!</b>\n\n"
+            f"👤 Клиент: {message.from_user.first_name}\n"
+            f"📞 Телефон: {text}\n"
+            f"⏰ Время: к 18:00\n"
+            f"💰 Цена: 1000₽\n\n"
+            f"📱 Для связи: @{message.from_user.username}"
+        )
+        
+        await bot.send_message(ADMIN_CHAT_ID, order_text)
+        
+        user_states[user_id] = 'main'
+        await delete_all_user_messages(user_id)
+        
+        sent_msg = await message.answer("✅ <b>Курица забронирована на 18:00!</b>\n\n🐔 Мы уже начали готовить вашу курочку!\n📞 Ожидайте звонка для подтверждения.\n\n🏠 Главное меню:", reply_markup=get_main_keyboard())
+        await add_user_message(sent_msg)
+        return
+
+    # ---- ЗАКАЗ ФУРШЕТА ----
+    if state == 'banquet_persons':
+        try:
+            persons = int(text)
+            if persons < BANQUET_MENU['min_persons']:
+                sent_msg = await message.answer(f"⚠️ <b>Минимальное количество: {BANQUET_MENU['min_persons']} персон!</b>\nВведите число от {BANQUET_MENU['min_persons']}:")
+                await add_user_message(sent_msg)
+                return
+            
+            banquet_orders[user_id]['persons'] = persons
+            user_states[user_id] = 'banquet_name'
+            
+            sent_msg = await message.answer("👤 Введите ваше имя:", reply_markup=get_cancel_keyboard())
+            await add_user_message(sent_msg)
+            return
+        except ValueError:
+            sent_msg = await message.answer("⚠️ <b>Пожалуйста, введите число!</b>\n<i>Например: 10</i>")
+            await add_user_message(sent_msg)
+            return
+
+    if state == 'banquet_name':
+        banquet_orders[user_id]['name'] = text
+        user_states[user_id] = 'banquet_phone'
+        
+        sent_msg = await message.answer("📞 Введите ваш номер телефона:", reply_markup=get_cancel_keyboard())
+        await add_user_message(sent_msg)
+        return
+
+    if state == 'banquet_phone':
+        if not validate_phone(text):
+            sent_msg = await message.answer("⚠️ <b>Некорректный номер телефона!</b>\n\nВведите номер в формате:\n<i>+7 (999) 123-45-67 или 89991234567</i>")
+            await add_user_message(sent_msg)
+            return
+        
+        banquet_orders[user_id]['phone'] = text
+        user_states[user_id] = 'banquet_address'
+        
+        sent_msg = await message.answer("📍 Введите адрес доставки:", reply_markup=get_cancel_keyboard())
+        await add_user_message(sent_msg)
+        return
+
+    if state == 'banquet_address':
+        if not validate_address(text):
+            sent_msg = await message.answer("⚠️ <b>Некорректный адрес!</b>\n\nВведите адрес более подробно:\n<i>Пример: г. Москва, ул. Ленина, д. 10, кв. 25</i>")
+            await add_user_message(sent_msg)
+            return
+        
+        banquet_orders[user_id]['address'] = text
+        
+        order_data = banquet_orders[user_id]
+        persons = order_data['persons']
+        total = persons * BANQUET_MENU['price_per_person']
+        
+        order_text = (
+            "🥂 <b>ЗАКАЗ ФУРШЕТА!</b>\n\n"
+            f"👤 <b>Имя:</b> {order_data['name']}\n"
+            f"📞 <b>Телефон:</b> {order_data['phone']}\n"
+            f"📍 <b>Адрес:</b> {order_data['address']}\n"
+            f"👥 <b>Количество персон:</b> {persons}\n"
+            f"💰 <b>Итого:</b> {total}₽\n\n"
+            f"📱 <b>Telegram:</b> @{message.from_user.username}"
+        )
+        
+        try:
+            await bot.send_message(ADMIN_CHAT_ID, order_text)
+        except Exception as e:
+            logger.error(f"Ошибка при отправке фуршета: {e}")
+        
+        user_states[user_id] = 'main'
+        del banquet_orders[user_id]
+        
+        await delete_all_user_messages(user_id)
+        
+        sent_msg = await message.answer(
+            f"✅ <b>Фуршет забронирован!</b>\n\n"
+            f"👥 Персон: {persons}\n"
+            f"💰 Сумма: {total}₽\n\n"
+            f"📞 С вами свяжется наша команда для уточнения деталей!",
+            reply_markup=get_main_keyboard()
+        )
+        await add_user_message(sent_msg)
+        return
+
+    sent_msg = await message.answer("👋 Выберите пункт в меню:", reply_markup=get_main_keyboard())
+    await add_user_message(sent_msg)
+
+async def send_order_to_admin(user_id):
+    cart = carts.get(user_id, {})
+    user = await bot.get_chat(user_id)
+    
+    total = 0
+    order_text = "🛒 <b>НОВЫЙ ЗАКАЗ!</b>\n\n"
+    order_text += f"👤 <b>Клиент:</b> {user.first_name}\n"
+    if user.last_name:
+        order_text += f"   {user.last_name}\n"
+    order_text += f"📞 <b>Телефон:</b> {cart.get('phone', 'Не указан')}\n"
+    
+    if 'address' in cart:
+        order_text += f"📍 <b>Адрес:</b> {cart['address']}\n"
+        order_text += "🚚 <b>Тип:</b> Доставка\n"
+    else:
+        order_text += "🏃 <b>Тип:</b> Самовывоз\n"
+    
+    order_text += "\n<b>— Состав заказа —</b>\n"
+    
+    for item_id, data in cart.items():
+        if item_id in ['address', 'phone']:
+            continue
+        if isinstance(data, list) and len(data) == 2:
+            price, qty = data
+            item_info = MENU_ITEMS.get(item_id, {})
+            item_name = item_info.get('name', 'Неизвестно')
+            
+            item_total = price * qty
+            total += item_total
+            order_text += f"• {item_name} x {qty} = <b>{item_total}₽</b>\n"
+    
+    order_text += f"\n💰 <b>ИТОГО: {total}₽</b>\n"
+    order_text += f"🕒 <b>Время заказа:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    
+    try:
+        await bot.send_message(ADMIN_CHAT_ID, order_text)
+    except Exception as e:
+        logger.error(f"Ошибка при отправке заказа: {e}")
+
+# ================= ОБРАБОТКА ОШИБОК =================
+@dp.errors()
+async def error_handler(update: types.Update, exception: Exception):
+    logger.error(f"Ошибка: {exception}")
+    
+    try:
+        user_id = None
+        if update and update.message:
+            user_id = update.message.from_user.id
+            first_name = update.message.from_user.first_name
+        elif update and update.callback_query:
+            user_id = update.callback_query.from_user.id
+            first_name = update.callback_query.from_user.first_name
+        else:
+            first_name = "Неизвестно"
+        
+        await bot.send_message(
+            ADMIN_CHAT_ID,
+            f"❌ <b>Произошла ошибка!</b>\n\nОшибка: {exception}\n"
+            f"Пользователь ID: {user_id}\nИмя: {first_name}\n"
+            f"Время: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+        
+        if user_id:
+            try:
+                await bot.send_message(
+                    user_id,
+                    "⚠️ <b>Произошла ошибка.</b>\nПопробуйте еще раз или напишите в поддержку: @grill_bar_support",
+                    reply_markup=get_main_keyboard()
+                )
+            except:
+                pass
+    except Exception as e:
+        logger.error(f"Не удалось обработать ошибку: {e}")
+    
+    return True
+
+# ================= ЗАПУСК =================
+async def main():
+    print("🤖 Бот Гриль Бар запущен!")
+    print("👨‍💼 Ожидание сообщений...")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
