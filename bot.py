@@ -4,19 +4,22 @@ import re
 import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputFile
+from aiogram.types import (
+    Message, CallbackQuery, 
+    InlineKeyboardMarkup, InlineKeyboardButton, 
+    InputFile
+)
 from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = "8860296167:AAGFjtPRi5uMUNr6VV1yDVsEdtxS37fevEY"  # Вставьте токен!
-ADMIN_CHAT_ID = -1004492034556  # ID вашего канала
+BOT_TOKEN = "8860296167:AAGFjtPRi5uMUNr6VV1yDVsEdtxS37fevEY"
+ADMIN_CHAT_ID = -1004492034556
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Создаем бота с поддержкой HTML
 bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
@@ -24,9 +27,8 @@ bot = Bot(
 dp = Dispatcher()
 
 # ================= ПУТЬ К ФОТО =================
-PHOTO_PATH = "bot_files/"  # Папка с фото
+PHOTO_PATH = "bot_files/"
 
-# Фото категорий
 CATEGORY_IMAGES = {
     "hot": PHOTO_PATH + "hot_food.jpg",
     "fry": PHOTO_PATH + "fried_food.jpg",
@@ -34,13 +36,6 @@ CATEGORY_IMAGES = {
     "drinks": PHOTO_PATH + "drinks.jpg"
 }
 
-# Фото товаров
-ITEM_IMAGES = {
-    "Шаурма классическая": PHOTO_PATH + "shawarma.jpg",
-    "Пицца 23 см (Пепперони)": PHOTO_PATH + "pizza.jpg"
-}
-
-# Баннеры для разделов
 BANNERS = {
     "menu": PHOTO_PATH + "menu_banner.jpg",
     "menu_categories": PHOTO_PATH + "menu_categories_banner.jpg",
@@ -50,13 +45,9 @@ BANNERS = {
 }
 
 # ================= УПРАВЛЕНИЕ СООБЩЕНИЯМИ =================
-user_messages = {}  # {user_id: [message_id, ...]} для отслеживания сообщений
+user_messages = {}
 
 async def clear_history(user_id, keep_message_id=None):
-    """
-    Удаляет все предыдущие сообщения пользователя.
-    Если keep_message_id указан - это сообщение НЕ удаляется (текущее сообщение юзера или сообщение с кнопками).
-    """
     if user_id in user_messages:
         for msg_id in user_messages[user_id]:
             if keep_message_id and msg_id == keep_message_id:
@@ -68,17 +59,14 @@ async def clear_history(user_id, keep_message_id=None):
         user_messages[user_id] = []
 
 async def add_user_message(message: Message):
-    """Добавляет сообщение в историю для последующего удаления"""
     user_id = message.from_user.id
     if user_id not in user_messages:
         user_messages[user_id] = []
     user_messages[user_id].append(message.message_id)
-    # Ограничиваем историю до 10 сообщений
     if len(user_messages[user_id]) > 10:
         user_messages[user_id] = user_messages[user_id][-10:]
 
 async def delete_all_user_messages(user_id):
-    """Удаляет все сообщения пользователя без исключений"""
     if user_id in user_messages:
         for msg_id in user_messages[user_id]:
             try:
@@ -171,7 +159,7 @@ BANQUET_MENU = {
 # ================= СОСТОЯНИЯ =================
 user_states = {}
 carts = {}
-banquet_orders = {}  # {user_id: {'persons': int, 'name': str, 'phone': str, 'address': str}}
+banquet_orders = {}
 
 # ================= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =================
 
@@ -219,37 +207,42 @@ def validate_phone(phone):
     return False
 
 def validate_address(address):
-    if len(address.strip()) < 5:
-        return False
-    return True
+    return len(address.strip()) >= 5
 
+# ================= ФУНКЦИИ КЛАВИАТУР =================
 def get_main_keyboard():
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton(text="⭐ Популярное", callback_data="popular"),
-        InlineKeyboardButton(text="📖 Наше меню", callback_data="menu")
-    )
-    kb.add(
-        InlineKeyboardButton(text="🥂 Фуршетное меню", callback_data="banquet"),
-        InlineKeyboardButton(text="🐔 Забронировать курицу", callback_data="book_chicken")
-    )
-    kb.add(
-        InlineKeyboardButton(text="🕒 График работы", callback_data="schedule"),
-        InlineKeyboardButton(text="📞 Контакты", callback_data="contacts")
-    )
-    kb.add(
-        InlineKeyboardButton(text="🛒 Моя корзина", callback_data="cart")
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="⭐ Популярное", callback_data="popular"),
+                InlineKeyboardButton(text="📖 Наше меню", callback_data="menu")
+            ],
+            [
+                InlineKeyboardButton(text="🥂 Фуршетное меню", callback_data="banquet"),
+                InlineKeyboardButton(text="🐔 Забронировать курицу", callback_data="book_chicken")
+            ],
+            [
+                InlineKeyboardButton(text="🕒 График работы", callback_data="schedule"),
+                InlineKeyboardButton(text="📞 Контакты", callback_data="contacts")
+            ],
+            [
+                InlineKeyboardButton(text="🛒 Моя корзина", callback_data="cart")
+            ]
+        ]
     )
     return kb
 
 def get_cancel_keyboard():
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(InlineKeyboardButton(text="🔙 Отмена", callback_data="cancel"))
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Отмена", callback_data="cancel")]
+        ]
+    )
     return kb
 
 def get_cart_keyboard(user_id):
     cart = carts.get(user_id, {})
-    kb = InlineKeyboardMarkup(row_width=3)
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
 
     for item_id, data in cart.items():
         if item_id in ['address', 'phone']:
@@ -265,22 +258,21 @@ def get_cart_keyboard(user_id):
             btn_center = InlineKeyboardButton(text=f"{btn_name}", callback_data="noop")
             btn_plus = InlineKeyboardButton(text="➕", callback_data=f"inc_{item_id}")
             
-            kb.row(btn_minus, btn_center, btn_plus)
+            kb.inline_keyboard.append([btn_minus, btn_center, btn_plus])
     
-    kb.row(
+    kb.inline_keyboard.append([
         InlineKeyboardButton(text="✅ Оформить заказ", callback_data="checkout"),
         InlineKeyboardButton(text="🗑 Очистить", callback_data="clear")
-    )
-    kb.row(
+    ])
+    kb.inline_keyboard.append([
         InlineKeyboardButton(text="🔙 В меню", callback_data="menu"),
         InlineKeyboardButton(text="🏠 Главное меню", callback_data="back")
-    )
+    ])
     
     return kb
 
 # ================= ФУНКЦИЯ ОТПРАВКИ С ФОТО =================
 async def send_with_photo(chat_id, text, image_path, reply_markup=None):
-    """Отправляет сообщение с фото, если файл существует"""
     try:
         if image_path and os.path.exists(image_path):
             photo = InputFile(image_path)
@@ -293,7 +285,6 @@ async def send_with_photo(chat_id, text, image_path, reply_markup=None):
     except Exception as e:
         logger.error(f"Ошибка отправки фото: {e}")
     
-    # Если фото не найдено, отправляем текст
     return await bot.send_message(
         chat_id=chat_id,
         text=text,
@@ -306,7 +297,6 @@ async def send_with_photo(chat_id, text, image_path, reply_markup=None):
 async def cmd_start(message: Message):
     user_id = message.from_user.id
     
-    # Чистим всю историю
     await delete_all_user_messages(user_id)
     
     if user_id not in carts:
@@ -314,10 +304,8 @@ async def cmd_start(message: Message):
     if user_id not in user_states:
         user_states[user_id] = 'main'
     
-    # Добавляем текущее сообщение в историю
     await add_user_message(message)
     
-    # Отправляем приветствие с баннером главного меню
     sent_msg = await send_with_photo(
         chat_id=user_id,
         text=(
@@ -346,7 +334,6 @@ async def back_main(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'main'
     
-    # Удаляем ВСЕ сообщения, включая текущее (с кнопками)
     await delete_all_user_messages(user_id)
     
     sent_msg = await send_with_photo(
@@ -376,7 +363,6 @@ async def cancel_input(callback: CallbackQuery):
     
     user_states[user_id] = 'main'
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(user_id)
     
     sent_msg = await send_with_photo(
@@ -396,17 +382,18 @@ async def cancel_input(callback: CallbackQuery):
 async def show_menu(callback: CallbackQuery):
     user_states[callback.from_user.id] = 'menu'
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
-    kb = InlineKeyboardMarkup(row_width=1)
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
     for cat_id, cat in MENU_ITEMS_CATEGORIES.items():
-        kb.add(InlineKeyboardButton(text=f"{cat['emoji']} {cat['name']}", callback_data=f"cat_{cat_id}"))
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=f"{cat['emoji']} {cat['name']}", callback_data=f"cat_{cat_id}")
+        ])
     
-    kb.row(
+    kb.inline_keyboard.append([
         InlineKeyboardButton(text="🛒 Моя корзина", callback_data="cart"),
         InlineKeyboardButton(text="🔙 Назад", callback_data="back")
-    )
+    ])
     
     sent_msg = await send_with_photo(
         chat_id=callback.from_user.id,
@@ -432,25 +419,25 @@ async def show_category(callback: CallbackQuery):
     
     user_states[callback.from_user.id] = f'category_{cat_id}'
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
     items_text = []
-    kb = InlineKeyboardMarkup(row_width=1)
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
     
     for item_id, info in MENU_ITEMS.items():
         if info['category'] == cat_id:
             items_text.append(f"• <b>{info['name']}</b> — <i>{info['price']}₽</i>")
-            kb.add(InlineKeyboardButton(text=f"➕ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}"))
+            kb.inline_keyboard.append([
+                InlineKeyboardButton(text=f"➕ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}")
+            ])
     
-    kb.row(
+    kb.inline_keyboard.append([
         InlineKeyboardButton(text="🔙 Назад к категориям", callback_data="menu"),
         InlineKeyboardButton(text="🏠 Главное меню", callback_data="back")
-    )
+    ])
     
     caption = f"{cat['emoji']} <b>{cat['name']}</b>\n\n" + "\n".join(items_text)
     
-    # Отправляем с фото категории
     photo_path = CATEGORY_IMAGES.get(cat_id)
     sent_msg = await send_with_photo(
         chat_id=callback.from_user.id,
@@ -470,21 +457,22 @@ async def show_popular(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'popular'
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(user_id)
     
     popular_items = ["Шаурма классическая", "Пицца 23 см (Пепперони)", "Курица Гриль", "Картофель фри (200гр)", "Молочный коктейль (Шоколад)"]
     
-    kb = InlineKeyboardMarkup(row_width=1)
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
     for item_name in popular_items:
         for item_id, info in MENU_ITEMS.items():
             if info['name'] == item_name:
-                kb.add(InlineKeyboardButton(text=f"⭐ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}"))
+                kb.inline_keyboard.append([
+                    InlineKeyboardButton(text=f"⭐ {info['name']} ({info['price']}₽)", callback_data=f"add_{item_id}")
+                ])
     
-    kb.row(
+    kb.inline_keyboard.append([
         InlineKeyboardButton(text="🔙 Назад", callback_data="back"),
         InlineKeyboardButton(text="📖 В меню", callback_data="menu")
-    )
+    ])
     
     sent_msg = await send_with_photo(
         chat_id=user_id,
@@ -532,7 +520,6 @@ async def show_cart(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'cart'
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(user_id)
     
     cart = carts.get(user_id, {})
@@ -650,12 +637,15 @@ async def checkout(callback: CallbackQuery):
     
     total = get_cart_total(user_id)
     
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.row(
-        InlineKeyboardButton(text="🏠 Доставка", callback_data="del"),
-        InlineKeyboardButton(text="🏃 Самовывоз", callback_data="pick")
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🏠 Доставка", callback_data="del"),
+                InlineKeyboardButton(text="🏃 Самовывоз", callback_data="pick")
+            ],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="cart")]
+        ]
     )
-    kb.row(InlineKeyboardButton(text="🔙 Назад", callback_data="cart"))
     
     try:
         await callback.message.edit_text(
@@ -742,14 +732,14 @@ async def delivery(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "banquet")
 async def banquet_menu(callback: CallbackQuery):
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton(text="📋 Подробное описание", callback_data="show_banquet"),
-        InlineKeyboardButton(text="🎯 Заказать фуршет", callback_data="order_banquet"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="back")
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Подробное описание", callback_data="show_banquet")],
+            [InlineKeyboardButton(text="🎯 Заказать фуршет", callback_data="order_banquet")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back")]
+        ]
     )
     
     sent_msg = await send_with_photo(
@@ -774,13 +764,13 @@ async def banquet_menu(callback: CallbackQuery):
 async def show_banquet_details(callback: CallbackQuery):
     items_text = "\n".join([f"• {item}" for item in BANQUET_MENU['items']])
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton(text="🎯 Заказать фуршет", callback_data="order_banquet"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="banquet")
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎯 Заказать фуршет", callback_data="order_banquet")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="banquet")]
+        ]
     )
     
     sent_msg = await send_with_photo(
@@ -807,7 +797,6 @@ async def order_banquet(callback: CallbackQuery):
     banquet_orders[user_id] = {}
     user_states[user_id] = 'banquet_persons'
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(user_id)
     
     sent_msg = await callback.message.answer(
@@ -823,14 +812,14 @@ async def order_banquet(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "book_chicken")
 async def book_chicken(callback: CallbackQuery):
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton(text="📅 Забронировать к 18:00", callback_data="book_18"),
-        InlineKeyboardButton(text="💬 Написать менеджеру", callback_data="contact_manager"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="back")
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📅 Забронировать к 18:00", callback_data="book_18")],
+            [InlineKeyboardButton(text="💬 Написать менеджеру", callback_data="contact_manager")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back")]
+        ]
     )
     
     sent_msg = await send_with_photo(
@@ -857,7 +846,6 @@ async def book_18(callback: CallbackQuery):
     user_id = callback.from_user.id
     user_states[user_id] = 'waiting_phone_chicken'
     
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(user_id)
     
     sent_msg = await callback.message.answer(
@@ -875,11 +863,13 @@ async def book_18(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "contact_manager")
 async def contact_manager(callback: CallbackQuery):
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(InlineKeyboardButton(text="🔙 Назад", callback_data="book_chicken"))
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="book_chicken")]
+        ]
+    )
     
     sent_msg = await callback.message.answer(
         "📞 <b>Свяжитесь с нами:</b>\n\nТелефон: +7 (900) 000-00-00\nTelegram: @grill_bar_manager\n\nМы на связи с 10:00 до 20:00!",
@@ -894,11 +884,13 @@ async def contact_manager(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "schedule")
 async def schedule(callback: CallbackQuery):
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back"))
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back")]
+        ]
+    )
     
     sent_msg = await callback.message.answer(
         "🕒 <b>График работы:</b>\n\n"
@@ -917,15 +909,17 @@ async def schedule(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "contacts")
 async def contacts(callback: CallbackQuery):
-    # Удаляем ВСЕ сообщения, включая текущее
     await delete_all_user_messages(callback.from_user.id)
     
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton(text="📍 Показать на карте", callback_data="show_location"),
-        InlineKeyboardButton(text="📞 Позвонить", callback_data="call_phone"),
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📍 Показать на карте", callback_data="show_location"),
+                InlineKeyboardButton(text="📞 Позвонить", callback_data="call_phone")
+            ],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back")]
+        ]
     )
-    kb.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back"))
     
     sent_msg = await callback.message.answer(
         "📞 <b>Наши контакты:</b>\n\n"
@@ -962,10 +956,7 @@ async def process_user_input(message: Message):
     user_id = message.from_user.id
     text = message.text.strip()
     
-    # ВАЖНО: Сначала удаляем ВСЕ старые сообщения, кроме текущего (которое пользователь только что написал)
     await clear_history(user_id, keep_message_id=message.message_id)
-    
-    # Добавляем текущее сообщение в историю
     await add_user_message(message)
     
     state = user_states.get(user_id, 'main')
@@ -995,10 +986,12 @@ async def process_user_input(message: Message):
         await send_order_to_admin(user_id)
         
         user_states[user_id] = 'main'
-        kb = InlineKeyboardMarkup(row_width=1)
-        kb.add(InlineKeyboardButton(text="🏠 В главное меню", callback_data="back"))
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🏠 В главное меню", callback_data="back")]
+            ]
+        )
         
-        # Удаляем все старые сообщения перед завершением
         await delete_all_user_messages(user_id)
         
         sent_msg = await message.answer(
@@ -1032,16 +1025,13 @@ async def process_user_input(message: Message):
         await bot.send_message(ADMIN_CHAT_ID, order_text)
         
         user_states[user_id] = 'main'
-        # Удаляем все старые сообщения перед завершением
         await delete_all_user_messages(user_id)
         
         sent_msg = await message.answer("✅ <b>Курица забронирована на 18:00!</b>\n\n🐔 Мы уже начали готовить вашу курочку!\n📞 Ожидайте звонка для подтверждения.\n\n🏠 Главное меню:", reply_markup=get_main_keyboard())
         await add_user_message(sent_msg)
         return
 
-    # ---- ЗАКАЗ ФУРШЕТА (пошаговый сбор данных) ----
-    
-    # Шаг 1: Ввод количества персон
+    # ---- ЗАКАЗ ФУРШЕТА ----
     if state == 'banquet_persons':
         try:
             persons = int(text)
@@ -1061,7 +1051,6 @@ async def process_user_input(message: Message):
             await add_user_message(sent_msg)
             return
 
-    # Шаг 2: Ввод имени
     if state == 'banquet_name':
         banquet_orders[user_id]['name'] = text
         user_states[user_id] = 'banquet_phone'
@@ -1070,7 +1059,6 @@ async def process_user_input(message: Message):
         await add_user_message(sent_msg)
         return
 
-    # Шаг 3: Ввод телефона
     if state == 'banquet_phone':
         if not validate_phone(text):
             sent_msg = await message.answer("⚠️ <b>Некорректный номер телефона!</b>\n\nВведите номер в формате:\n<i>+7 (999) 123-45-67 или 89991234567</i>")
@@ -1084,7 +1072,6 @@ async def process_user_input(message: Message):
         await add_user_message(sent_msg)
         return
 
-    # Шаг 4: Ввод адреса (последний шаг)
     if state == 'banquet_address':
         if not validate_address(text):
             sent_msg = await message.answer("⚠️ <b>Некорректный адрес!</b>\n\nВведите адрес более подробно:\n<i>Пример: г. Москва, ул. Ленина, д. 10, кв. 25</i>")
@@ -1093,12 +1080,10 @@ async def process_user_input(message: Message):
         
         banquet_orders[user_id]['address'] = text
         
-        # Собираем полный заказ
         order_data = banquet_orders[user_id]
         persons = order_data['persons']
         total = persons * BANQUET_MENU['price_per_person']
         
-        # Отправляем администратору (с защитой от ошибок)
         order_text = (
             "🥂 <b>ЗАКАЗ ФУРШЕТА!</b>\n\n"
             f"👤 <b>Имя:</b> {order_data['name']}\n"
@@ -1114,14 +1099,11 @@ async def process_user_input(message: Message):
         except Exception as e:
             logger.error(f"Ошибка при отправке фуршета: {e}")
         
-        # Сбрасываем состояния
         user_states[user_id] = 'main'
         del banquet_orders[user_id]
         
-        # Удаляем все старые сообщения перед завершением
         await delete_all_user_messages(user_id)
         
-        # Подтверждение клиенту
         sent_msg = await message.answer(
             f"✅ <b>Фуршет забронирован!</b>\n\n"
             f"👥 Персон: {persons}\n"
@@ -1132,7 +1114,6 @@ async def process_user_input(message: Message):
         await add_user_message(sent_msg)
         return
 
-    # ---- ЕСЛИ НЕТ ОЖИДАНИЯ ----
     sent_msg = await message.answer("👋 Выберите пункт в меню:", reply_markup=get_main_keyboard())
     await add_user_message(sent_msg)
 
@@ -1207,7 +1188,6 @@ async def error_handler(update: types.Update, exception: Exception):
                 )
             except:
                 pass
-                
     except Exception as e:
         logger.error(f"Не удалось обработать ошибку: {e}")
     
@@ -1217,8 +1197,6 @@ async def error_handler(update: types.Update, exception: Exception):
 async def main():
     print("🤖 Бот Гриль Бар запущен!")
     print("👨‍💼 Ожидание сообщений...")
-    
-    # Запускаем поллинг
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
