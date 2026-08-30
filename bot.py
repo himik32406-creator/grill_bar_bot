@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import (
     Message, CallbackQuery, 
     InlineKeyboardMarkup, InlineKeyboardButton, 
-    InputFile
+    FSInputFile
 )
 from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
@@ -275,7 +275,7 @@ def get_cart_keyboard(user_id):
 async def send_with_photo(chat_id, text, image_path, reply_markup=None):
     try:
         if image_path and os.path.exists(image_path):
-            photo = InputFile(image_path)
+            photo = FSInputFile(image_path)
             return await bot.send_photo(
                 chat_id=chat_id,
                 photo=photo,
